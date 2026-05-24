@@ -45,7 +45,7 @@ def gstreamer_pipeline(
     )
 
 
-def show_camera(display_height, max_fps):
+def show_camera(display_height, max_fps, denoise):
     window_title = "CSI Camera"
     display_width = int(display_height * 16 / 9)
     frame_interval = 1.0 / max_fps
@@ -64,7 +64,8 @@ def show_camera(display_height, max_fps):
             last_frame_time = 0.0
             while True:
                 ret_val, frame = video_capture.read()
-
+                if denoise: 
+                    frame = cv2.fastNlMeansDenoisingColored(frame, None, 100, 10, 7, 15)
                 now = time.monotonic()
                 if now - last_frame_time < frame_interval:
                     keyCode = cv2.waitKey(1) & 0xFF
@@ -97,5 +98,6 @@ if __name__ == "__main__":
                         help="Display height in pixels (width scales to 16:9). Default: 540")
     parser.add_argument("--fps", type=int, default=15,
                         help="Max display refresh rate in frames per second. Default: 15")
+    parser.add_argument("--denoise", type=bool, default=False, help="")
     args = parser.parse_args()
-    show_camera(args.height, args.fps)
+    show_camera(args.height, args.fps, args.denoise)

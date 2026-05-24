@@ -66,6 +66,9 @@ def face_detect(display_height, max_fps):
             last_frame_time = 0.0
             while True:
                 ret, frame = video_capture.read()
+                frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+                frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+                
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 

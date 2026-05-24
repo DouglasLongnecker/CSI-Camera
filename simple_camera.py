@@ -5,6 +5,9 @@
 # NVIDIA Jetson Nano Developer Kit using OpenCV
 # Drivers for the camera and OpenCV are included in the base image
 
+import argparse
+import time
+
 import cv2
 
 """ 
@@ -42,17 +45,34 @@ def gstreamer_pipeline(
     )
 
 
-def show_camera():
+def show_camera(display_height, max_fps):
     window_title = "CSI Camera"
+    display_width = int(display_height * 16 / 9)
+    frame_interval = 1.0 / max_fps
 
     # To flip the image, modify the flip_method parameter (0 and 2 are the most common)
-    print(gstreamer_pipeline(flip_method=0))
-    video_capture = cv2.VideoCapture(gstreamer_pipeline(flip_method=0), cv2.CAP_GSTREAMER)
+    pipeline = gstreamer_pipeline(
+        flip_method=0,
+        display_width=display_width,
+        display_height=display_height,
+    )
+    print(pipeline)
+    video_capture = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
     if video_capture.isOpened():
         try:
             window_handle = cv2.namedWindow(window_title, cv2.WINDOW_AUTOSIZE)
+            last_frame_time = 0.0
             while True:
                 ret_val, frame = video_capture.read()
+
+                now = time.monotonic()
+                if now - last_frame_time < frame_interval:
+                    keyCode = cv2.waitKey(1) & 0xFF
+                    if keyCode == 27 or keyCode == ord('q'):
+                        break
+                    continue
+                last_frame_time = now
+
                 # Check to see if the user closed the window
                 # Under GTK+ (Jetson Default), WND_PROP_VISIBLE does not work correctly. Under Qt it does
                 # GTK - Substitute WND_PROP_AUTOSIZE to detect if window has been closed by user
@@ -60,7 +80,7 @@ def show_camera():
                     cv2.imshow(window_title, frame)
                 else:
                     break 
-                keyCode = cv2.waitKey(10) & 0xFF
+                keyCode = cv2.waitKey(1) & 0xFF
                 # Stop the program on the ESC key or 'q'
                 if keyCode == 27 or keyCode == ord('q'):
                     break
@@ -72,4 +92,10 @@ def show_camera():
 
 
 if __name__ == "__main__":
-    show_camera()
+    parser = argparse.ArgumentParser(description="CSI Camera viewer")
+    parser.add_argument("--height", type=int, default=540,
+                        help="Display height in pixels (width scales to 16:9). Default: 540")
+    parser.add_argument("--fps", type=int, default=15,
+                        help="Max display refresh rate in frames per second. Default: 15")
+    args = parser.parse_args()
+    show_camera(args.height, args.fps)

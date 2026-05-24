@@ -11,8 +11,11 @@
 # The camera streams are each read in their own thread, as when done sequentially there
 # is a noticeable lag
 
-import cv2
+import argparse
 import threading
+import time
+
+import cv2
 import numpy as np
 
 
@@ -125,8 +128,11 @@ def gstreamer_pipeline(
     )
 
 
-def run_cameras():
+def run_cameras(display_height, max_fps):
     window_title = "Dual CSI Cameras"
+    display_width = int(display_height * 16 / 9)
+    frame_interval = 1.0 / max_fps
+
     left_camera = CSI_Camera()
     left_camera.open(
         gstreamer_pipeline(
@@ -134,8 +140,8 @@ def run_cameras():
             capture_width=1920,
             capture_height=1080,
             flip_method=0,
-            display_width=960,
-            display_height=540,
+            display_width=display_width,
+            display_height=display_height,
         )
     )
     left_camera.start()
@@ -147,8 +153,8 @@ def run_cameras():
             capture_width=1920,
             capture_height=1080,
             flip_method=0,
-            display_width=960,
-            display_height=540,
+            display_width=display_width,
+            display_height=display_height,
         )
     )
     right_camera.start()
@@ -158,11 +164,20 @@ def run_cameras():
         cv2.namedWindow(window_title, cv2.WINDOW_AUTOSIZE)
 
         try:
+            last_frame_time = 0.0
             while True:
                 _, left_image = left_camera.read()
                 _, right_image = right_camera.read()
-                # Use numpy to place images next to each other
-                camera_images = np.hstack((left_image, right_image)) 
+
+                now = time.monotonic()
+                if now - last_frame_time < frame_interval:
+                    keyCode = cv2.waitKey(1) & 0xFF
+                    if keyCode == 27:
+                        break
+                    continue
+                last_frame_time = now
+
+                camera_images = np.hstack((left_image, right_image))
                 # Check to see if the user closed the window
                 # Under GTK+ (Jetson Default), WND_PROP_VISIBLE does not work correctly. Under Qt it does
                 # GTK - Substitute WND_PROP_AUTOSIZE to detect if window has been closed by user
@@ -171,8 +186,7 @@ def run_cameras():
                 else:
                     break
 
-                # This also acts as
-                keyCode = cv2.waitKey(30) & 0xFF
+                keyCode = cv2.waitKey(1) & 0xFF
                 # Stop the program on the ESC key
                 if keyCode == 27:
                     break
@@ -193,4 +207,10 @@ def run_cameras():
 
 
 if __name__ == "__main__":
-    run_cameras()
+    parser = argparse.ArgumentParser(description="Dual CSI Camera viewer")
+    parser.add_argument("--height", type=int, default=540,
+                        help="Display height per camera in pixels (width scales to 16:9). Default: 540")
+    parser.add_argument("--fps", type=int, default=15,
+                        help="Max display refresh rate in frames per second. Default: 15")
+    args = parser.parse_args()
+    run_cameras(args.height, args.fps)

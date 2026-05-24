@@ -6,6 +6,9 @@
 # On the Jetson Nano, OpenCV comes preinstalled
 # Data files are in /usr/sharc/OpenCV
 
+import argparse
+import time
+
 import cv2
 
 # gstreamer_pipeline returns a GStreamer pipeline for capturing from the CSI camera
@@ -41,18 +44,26 @@ def gstreamer_pipeline(
     )
 
 
-def face_detect():
+def face_detect(display_height, max_fps):
     window_title = "Face Detect"
+    display_width = int(display_height * 16 / 9)
+    frame_interval = 1.0 / max_fps
+
     face_cascade = cv2.CascadeClassifier(
         "/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml"
     )
     eye_cascade = cv2.CascadeClassifier(
         "/usr/share/opencv4/haarcascades/haarcascade_eye.xml"
     )
-    video_capture = cv2.VideoCapture(gstreamer_pipeline(), cv2.CAP_GSTREAMER)
+    pipeline = gstreamer_pipeline(
+        display_width=display_width,
+        display_height=display_height,
+    )
+    video_capture = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
     if video_capture.isOpened():
         try:
             cv2.namedWindow(window_title, cv2.WINDOW_AUTOSIZE)
+            last_frame_time = 0.0
             while True:
                 ret, frame = video_capture.read()
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -67,6 +78,15 @@ def face_detect():
                         cv2.rectangle(
                             roi_color, (ex, ey), (ex + ew, ey + eh), (0, 255, 0), 2
                         )
+
+                now = time.monotonic()
+                if now - last_frame_time < frame_interval:
+                    keyCode = cv2.waitKey(1) & 0xFF
+                    if keyCode == 27 or keyCode == ord('q'):
+                        break
+                    continue
+                last_frame_time = now
+
                 # Check to see if the user closed the window
                 # Under GTK+ (Jetson Default), WND_PROP_VISIBLE does not work correctly. Under Qt it does
                 # GTK - Substitute WND_PROP_AUTOSIZE to detect if window has been closed by user
@@ -74,7 +94,7 @@ def face_detect():
                     cv2.imshow(window_title, frame)
                 else:
                     break
-                keyCode = cv2.waitKey(10) & 0xFF
+                keyCode = cv2.waitKey(1) & 0xFF
                 # Stop the program on the ESC key or 'q'
                 if keyCode == 27 or keyCode == ord('q'):
                     break
@@ -86,4 +106,10 @@ def face_detect():
 
 
 if __name__ == "__main__":
-    face_detect()
+    parser = argparse.ArgumentParser(description="CSI Camera face detection")
+    parser.add_argument("--height", type=int, default=540,
+                        help="Display height in pixels (width scales to 16:9). Default: 540")
+    parser.add_argument("--fps", type=int, default=15,
+                        help="Max display refresh rate in frames per second. Default: 15")
+    args = parser.parse_args()
+    face_detect(args.height, args.fps)
